@@ -15,6 +15,16 @@ public final class Microflows
 	private Microflows() {}
 
 	// These are the microflows for the JMXMonitor module
+	public static com.mendix.core.actionmanagement.MicroflowCallBuilder aCT_Metrics_CollectAndLogBuilder()
+	{
+		com.mendix.core.actionmanagement.MicroflowCallBuilder builder = Core.microflowCall("JMXMonitor.ACT_Metrics_CollectAndLog");
+		return builder;
+	}
+
+	public static void aCT_Metrics_CollectAndLog(IContext context)
+	{
+		aCT_Metrics_CollectAndLogBuilder().execute(context);
+	}
 	public static com.mendix.core.actionmanagement.MicroflowCallBuilder aCT_Metrics_LogAllBuilder()
 	{
 		com.mendix.core.actionmanagement.MicroflowCallBuilder builder = Core.microflowCall("JMXMonitor.ACT_Metrics_LogAll");
