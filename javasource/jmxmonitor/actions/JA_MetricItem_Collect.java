@@ -13,154 +13,383 @@ import com.mendix.systemwideinterfaces.core.IContext;
 import com.mendix.systemwideinterfaces.core.IMendixObject;
 import com.mendix.systemwideinterfaces.core.UserAction;
 
-public class JA_MetricItem_Collect extends UserAction<java.util.List<IMendixObject>>
-{
-	public JA_MetricItem_Collect(IContext context)
-	{
+public class JA_MetricItem_Collect extends UserAction<java.util.List<IMendixObject>> {
+	public JA_MetricItem_Collect(IContext context) {
 		super(context);
 	}
 
 	@java.lang.Override
-	public java.util.List<IMendixObject> executeAction() throws Exception
-	{
+	public java.util.List<IMendixObject> executeAction() throws Exception {
 		// BEGIN USER CODE
-		java.util.List<IMendixObject> resultList = new java.util.ArrayList<>();
-		java.util.Date now = new java.util.Date();
-		IContext ctx = getContext();
+		final java.util.List<IMendixObject> resultList = new java.util.ArrayList<>();
+		final java.util.Date now = new java.util.Date();
+		final IContext ctx = getContext();
+
+		final java.lang.management.MemoryMXBean mem = java.lang.management.ManagementFactory.getMemoryMXBean();
+		final java.lang.management.OperatingSystemMXBean os = java.lang.management.ManagementFactory
+				.getOperatingSystemMXBean();
+		final java.lang.management.ThreadMXBean threads = java.lang.management.ManagementFactory.getThreadMXBean();
+		final java.lang.management.RuntimeMXBean rt = java.lang.management.ManagementFactory.getRuntimeMXBean();
+		final javax.management.MBeanServer mbs = java.lang.management.ManagementFactory.getPlatformMBeanServer();
 
 		// ── 1. MEMORY (Heap & Non-Heap) ───────────────────────────────────────────
-		java.lang.management.MemoryMXBean mem = java.lang.management.ManagementFactory.getMemoryMXBean();
-		java.lang.management.MemoryUsage heap = mem.getHeapMemoryUsage();
-		long heapUsedBytes = heap.getUsed();
-		long heapMaxBytes = heap.getMax();
-		long heapCommittedBytes = heap.getCommitted();
+		runSection("Memory", () -> {
+			java.lang.management.MemoryUsage heap = mem.getHeapMemoryUsage();
+			long heapUsedBytes = heap.getUsed();
+			long heapMaxBytes = heap.getMax();
+			long heapCommittedBytes = heap.getCommitted();
 
-		addMetric(ctx, resultList, now, "Memory", "HeapUsedMB", toMB(heapUsedBytes), "MB");
-		addMetric(ctx, resultList, now, "Memory", "HeapCommittedMB", toMB(heapCommittedBytes), "MB");
-		if (heapMaxBytes > 0) {
-			addMetric(ctx, resultList, now, "Memory", "HeapMaxMB", toMB(heapMaxBytes), "MB");
-			double heapPct = ((double) heapUsedBytes / (double) heapMaxBytes) * 100.0;
-			addMetric(ctx, resultList, now, "Memory", "HeapUsagePercent", round(heapPct, 2), "%");
-		}
+			addMetric(ctx, resultList, now, "Memory", "HeapUsedMB", toMB(heapUsedBytes), "MB");
+			addMetric(ctx, resultList, now, "Memory", "HeapCommittedMB", toMB(heapCommittedBytes), "MB");
+			if (heapMaxBytes > 0) {
+				addMetric(ctx, resultList, now, "Memory", "HeapMaxMB", toMB(heapMaxBytes), "MB");
+				double heapPct = ((double) heapUsedBytes / (double) heapMaxBytes) * 100.0;
+				addMetric(ctx, resultList, now, "Memory", "HeapUsagePercent", round(heapPct, 2), "%");
+			}
 
-		java.lang.management.MemoryUsage nonHeap = mem.getNonHeapMemoryUsage();
-		addMetric(ctx, resultList, now, "Memory", "NonHeapUsedMB", toMB(nonHeap.getUsed()), "MB");
-		addMetric(ctx, resultList, now, "Memory", "NonHeapCommittedMB", toMB(nonHeap.getCommitted()), "MB");
+			java.lang.management.MemoryUsage nonHeap = mem.getNonHeapMemoryUsage();
+			addMetric(ctx, resultList, now, "Memory", "NonHeapUsedMB", toMB(nonHeap.getUsed()), "MB");
+			addMetric(ctx, resultList, now, "Memory", "NonHeapCommittedMB", toMB(nonHeap.getCommitted()), "MB");
 
-		// Memory pools (Eden, Survivor, Old Gen, Metaspace, etc.)
-		for (java.lang.management.MemoryPoolMXBean pool : java.lang.management.ManagementFactory.getMemoryPoolMXBeans()) {
-			java.lang.management.MemoryUsage poolUsage = pool.getUsage();
-			if (poolUsage != null) {
-				String sanitizedPoolName = pool.getName().replaceAll("\\s+", "");
-				addMetric(ctx, resultList, now, "MemoryPool", sanitizedPoolName + "UsedMB", toMB(poolUsage.getUsed()), "MB");
-				if (poolUsage.getMax() > 0) {
-					addMetric(ctx, resultList, now, "MemoryPool", sanitizedPoolName + "MaxMB", toMB(poolUsage.getMax()), "MB");
+			// Memory pools (Eden, Survivor, Old Gen, Metaspace, etc.)
+			for (java.lang.management.MemoryPoolMXBean pool : java.lang.management.ManagementFactory
+					.getMemoryPoolMXBeans()) {
+				String poolName = sanitize(pool.getName());
+
+				java.lang.management.MemoryUsage poolUsage = pool.getUsage();
+				if (poolUsage != null) {
+					addMetric(ctx, resultList, now, "MemoryPool", poolName + "UsedMB", toMB(poolUsage.getUsed()), "MB");
+					if (poolUsage.getMax() > 0) {
+						addMetric(ctx, resultList, now, "MemoryPool", poolName + "MaxMB", toMB(poolUsage.getMax()),
+								"MB");
+					}
+				}
+
+				// Usage right after the last GC: best indicator of the real live set / leaks
+				java.lang.management.MemoryUsage afterGc = pool.getCollectionUsage();
+				if (afterGc != null) {
+					addMetric(ctx, resultList, now, "MemoryPool", poolName + "UsedAfterGcMB", toMB(afterGc.getUsed()),
+							"MB");
 				}
 			}
+		});
+
+		// ── 2. BUFFER POOLS (direct / mapped, off-heap) ───────────────────────────
+		runSection("BufferPools", () -> {
+			for (java.lang.management.BufferPoolMXBean bp : java.lang.management.ManagementFactory
+					.getPlatformMXBeans(java.lang.management.BufferPoolMXBean.class)) {
+				String n = sanitize(bp.getName());
+				addMetric(ctx, resultList, now, "BufferPool", n + "UsedMB", toMB(bp.getMemoryUsed()), "MB");
+				addMetric(ctx, resultList, now, "BufferPool", n + "Count", java.math.BigDecimal.valueOf(bp.getCount()),
+						"count");
+			}
+		});
+
+		// ── 3. CPU & OPERATING SYSTEM ─────────────────────────────────────────────
+		runSection("CPU/OS", () -> {
+			addMetric(ctx, resultList, now, "CPU", "AvailableProcessors",
+					java.math.BigDecimal.valueOf(os.getAvailableProcessors()), "count");
+
+			double loadAvg = os.getSystemLoadAverage();
+			if (loadAvg >= 0) {
+				addMetric(ctx, resultList, now, "CPU", "SystemLoadAverage", round(loadAvg, 2), "load");
+			}
+
+			if (os instanceof com.sun.management.OperatingSystemMXBean) {
+				com.sun.management.OperatingSystemMXBean sunOs = (com.sun.management.OperatingSystemMXBean) os;
+
+				double procCpu = sunOs.getProcessCpuLoad();
+				if (procCpu >= 0) {
+					addMetric(ctx, resultList, now, "CPU", "ProcessCpuPercent", round(procCpu * 100.0, 2), "%");
+				}
+
+				double sysCpu = sunOs.getCpuLoad();
+				if (sysCpu >= 0) {
+					addMetric(ctx, resultList, now, "CPU", "SystemCpuPercent", round(sysCpu * 100.0, 2), "%");
+				}
+
+				long procCpuTimeNs = sunOs.getProcessCpuTime();
+				if (procCpuTimeNs >= 0) {
+					addMetric(ctx, resultList, now, "CPU", "ProcessCpuTimeSec",
+							round(procCpuTimeNs / 1_000_000_000.0, 2), "s");
+				}
+
+				long totalMem = sunOs.getTotalMemorySize();
+				if (totalMem > 0) {
+					addMetric(ctx, resultList, now, "OSMemory", "TotalPhysicalMemoryMB", toMB(totalMem), "MB");
+				}
+
+				long freeMem = sunOs.getFreeMemorySize();
+				if (freeMem >= 0) {
+					addMetric(ctx, resultList, now, "OSMemory", "FreePhysicalMemoryMB", toMB(freeMem), "MB");
+				}
+
+				if (totalMem > 0 && freeMem >= 0) {
+					addMetric(ctx, resultList, now, "OSMemory", "PhysicalMemoryUsagePercent",
+							round(((double) (totalMem - freeMem) / (double) totalMem) * 100.0, 2), "%");
+				}
+
+				long totalSwap = sunOs.getTotalSwapSpaceSize();
+				if (totalSwap > 0) {
+					addMetric(ctx, resultList, now, "OSMemory", "TotalSwapMB", toMB(totalSwap), "MB");
+				}
+
+				long freeSwap = sunOs.getFreeSwapSpaceSize();
+				if (freeSwap >= 0) {
+					addMetric(ctx, resultList, now, "OSMemory", "FreeSwapMB", toMB(freeSwap), "MB");
+				}
+
+				long committedVirtual = sunOs.getCommittedVirtualMemorySize();
+				if (committedVirtual >= 0) {
+					addMetric(ctx, resultList, now, "OSMemory", "CommittedVirtualMemoryMB", toMB(committedVirtual),
+							"MB");
+				}
+			}
+
+			// File descriptors (Unix only): useful for leak detection
+			if (os instanceof com.sun.management.UnixOperatingSystemMXBean) {
+				com.sun.management.UnixOperatingSystemMXBean unixOs = (com.sun.management.UnixOperatingSystemMXBean) os;
+				long openFd = unixOs.getOpenFileDescriptorCount();
+				long maxFd = unixOs.getMaxFileDescriptorCount();
+				addMetric(ctx, resultList, now, "OS", "OpenFileDescriptors", java.math.BigDecimal.valueOf(openFd),
+						"count");
+				addMetric(ctx, resultList, now, "OS", "MaxFileDescriptors", java.math.BigDecimal.valueOf(maxFd),
+						"count");
+				if (maxFd > 0) {
+					addMetric(ctx, resultList, now, "OS", "FileDescriptorUsagePercent",
+							round(((double) openFd / (double) maxFd) * 100.0, 2), "%");
+				}
+			}
+		});
+
+		// ── 4. DISK ───────────────────────────────────────────────────────────────
+		if (ENABLE_DISK) {
+			runSection("Disk", () -> {
+				for (java.io.File root : java.io.File.listRoots()) {
+					long total = root.getTotalSpace();
+					if (total > 0) {
+						long usable = root.getUsableSpace();
+						String n = sanitize(root.getPath());
+						if (n.isEmpty())
+							n = "root";
+						addMetric(ctx, resultList, now, "Disk", n + "FreeGB", round(usable / 1073741824.0, 2), "GB");
+						addMetric(ctx, resultList, now, "Disk", n + "UsagePercent",
+								round((1.0 - (double) usable / (double) total) * 100.0, 2), "%");
+					}
+				}
+			});
 		}
 
-		// ── 2. CPU & OPERATING SYSTEM ─────────────────────────────────────────────
-		java.lang.management.OperatingSystemMXBean os = java.lang.management.ManagementFactory.getOperatingSystemMXBean();
-		addMetric(ctx, resultList, now, "CPU", "AvailableProcessors", java.math.BigDecimal.valueOf(os.getAvailableProcessors()), "count");
+		// ── 5. THREADS ────────────────────────────────────────────────────────────
+		runSection("Threads", () -> {
+			addMetric(ctx, resultList, now, "Threads", "LiveThreadCount",
+					java.math.BigDecimal.valueOf(threads.getThreadCount()), "count");
+			addMetric(ctx, resultList, now, "Threads", "PeakThreadCount",
+					java.math.BigDecimal.valueOf(threads.getPeakThreadCount()), "count");
+			addMetric(ctx, resultList, now, "Threads", "DaemonThreadCount",
+					java.math.BigDecimal.valueOf(threads.getDaemonThreadCount()), "count");
+			addMetric(ctx, resultList, now, "Threads", "TotalStartedThreadCount",
+					java.math.BigDecimal.valueOf(threads.getTotalStartedThreadCount()), "count");
+			addDelta(ctx, resultList, now, "Threads", "ThreadsStarted",
+					java.math.BigDecimal.valueOf(threads.getTotalStartedThreadCount()), "threads/min");
 
-		double loadAvg = os.getSystemLoadAverage();
-		if (loadAvg >= 0) {
-			addMetric(ctx, resultList, now, "CPU", "SystemLoadAverage", round(loadAvg, 2), "load");
+			long[] deadlocked = threads.findDeadlockedThreads();
+			int deadlockCount = (deadlocked != null) ? deadlocked.length : 0;
+			addMetric(ctx, resultList, now, "Threads", "DeadlockCount", java.math.BigDecimal.valueOf(deadlockCount),
+					"count");
+
+			// Deadlock details go to the log
+			if (deadlocked != null && deadlockCount > 0) {
+				try {
+					for (java.lang.management.ThreadInfo ti : threads.getThreadInfo(deadlocked, true, true)) {
+						if (ti != null) {
+							com.mendix.core.Core.getLogger("JMXMonitor").warn("Deadlocked thread: " + ti.toString());
+						}
+					}
+				} catch (Exception ignored) {
+				}
+			}
+		});
+
+		if (ENABLE_THREAD_DETAILS) {
+			runSection("ThreadDetails", () -> {
+				long[] ids = threads.getAllThreadIds();
+				java.lang.management.ThreadInfo[] infos = threads.getThreadInfo(ids);
+
+				// Thread state breakdown: spots lock contention
+				java.util.Map<Thread.State, Integer> stateCount = new java.util.EnumMap<>(Thread.State.class);
+				for (java.lang.management.ThreadInfo ti : infos) {
+					if (ti != null)
+						stateCount.merge(ti.getThreadState(), 1, Integer::sum);
+				}
+				for (Thread.State s : Thread.State.values()) {
+					addMetric(ctx, resultList, now, "ThreadStates", s.name() + "Count",
+							java.math.BigDecimal.valueOf(stateCount.getOrDefault(s, 0)), "count");
+				}
+
+				// Per-thread CPU: total and top N
+				if (threads.isThreadCpuTimeSupported() && threads.isThreadCpuTimeEnabled()) {
+					long totalCpuNs = 0;
+					java.util.List<java.util.Map.Entry<String, Long>> cpuList = new java.util.ArrayList<>();
+					for (int i = 0; i < ids.length; i++) {
+						long t = threads.getThreadCpuTime(ids[i]);
+						if (t > 0) {
+							totalCpuNs += t;
+							if (infos[i] != null) {
+								cpuList.add(new java.util.AbstractMap.SimpleEntry<>(infos[i].getThreadName(), t));
+							}
+						}
+					}
+					addMetric(ctx, resultList, now, "Threads", "TotalThreadCpuTimeSec",
+							round(totalCpuNs / 1_000_000_000.0, 2), "s");
+
+					cpuList.sort((a, b) -> Long.compare(b.getValue(), a.getValue()));
+					for (int i = 0; i < Math.min(TOP_CPU_THREADS, cpuList.size()); i++) {
+						java.util.Map.Entry<String, Long> e = cpuList.get(i);
+						addMetric(ctx, resultList, now, "TopCpuThreads",
+								"Top" + (i + 1) + "_" + sanitize(e.getKey()) + "_CpuSec",
+								round(e.getValue() / 1_000_000_000.0, 2), "s");
+					}
+				}
+			});
 		}
 
-		if (os instanceof com.sun.management.OperatingSystemMXBean) {
-			com.sun.management.OperatingSystemMXBean sunOs = (com.sun.management.OperatingSystemMXBean) os;
+		// ── 6. GARBAGE COLLECTION ─────────────────────────────────────────────────
+		runSection("GC", () -> {
+			long totalGcCount = 0;
+			long totalGcTime = 0;
+			for (java.lang.management.GarbageCollectorMXBean gc : java.lang.management.ManagementFactory
+					.getGarbageCollectorMXBeans()) {
+				long count = gc.getCollectionCount();
+				long time = gc.getCollectionTime();
+				if (count > 0)
+					totalGcCount += count;
+				if (time > 0)
+					totalGcTime += time;
 
-			double procCpu = sunOs.getProcessCpuLoad();
-			if (procCpu >= 0) {
-				addMetric(ctx, resultList, now, "CPU", "ProcessCpuPercent", round(procCpu * 100.0, 2), "%");
+				String gcKey = sanitize(gc.getName());
+				if (count >= 0) {
+					addMetric(ctx, resultList, now, "GC", gcKey + "Count", java.math.BigDecimal.valueOf(count),
+							"count");
+				}
+				if (time >= 0) {
+					addMetric(ctx, resultList, now, "GC", gcKey + "TimeMs", java.math.BigDecimal.valueOf(time), "ms");
+				}
+
+				// Duration of the last collection of this collector
+				if (gc instanceof com.sun.management.GarbageCollectorMXBean) {
+					try {
+						com.sun.management.GcInfo info = ((com.sun.management.GarbageCollectorMXBean) gc)
+								.getLastGcInfo();
+						if (info != null) {
+							addMetric(ctx, resultList, now, "GC", gcKey + "LastGcDurationMs",
+									java.math.BigDecimal.valueOf(info.getDuration()), "ms");
+						}
+					} catch (Exception ignored) {
+					}
+				}
+			}
+			addMetric(ctx, resultList, now, "GC", "TotalCollectionCount", java.math.BigDecimal.valueOf(totalGcCount),
+					"count");
+			addMetric(ctx, resultList, now, "GC", "TotalCollectionTimeMs", java.math.BigDecimal.valueOf(totalGcTime),
+					"ms");
+
+			// Overhead since JVM start
+			long uptimeMs = rt.getUptime();
+			if (uptimeMs > 0) {
+				addMetric(ctx, resultList, now, "GC", "GcOverheadPercent",
+						round(((double) totalGcTime / (double) uptimeMs) * 100.0, 2), "%");
 			}
 
-			double sysCpu = sunOs.getCpuLoad();
-			if (sysCpu >= 0) {
-				addMetric(ctx, resultList, now, "CPU", "SystemCpuPercent", round(sysCpu * 100.0, 2), "%");
-			}
+			// Rates per minute since the previous collection
+			addDelta(ctx, resultList, now, "GC", "GcCollections", java.math.BigDecimal.valueOf(totalGcCount),
+					"collections/min");
+			addDelta(ctx, resultList, now, "GC", "GcTimeMs", java.math.BigDecimal.valueOf(totalGcTime), "ms/min");
+		});
 
-			long totalMem = sunOs.getTotalMemorySize();
-			if (totalMem > 0) {
-				addMetric(ctx, resultList, now, "OSMemory", "TotalPhysicalMemoryMB", toMB(totalMem), "MB");
-			}
+		// ── 7. CLASS LOADING & JIT ────────────────────────────────────────────────
+		runSection("ClassLoading", () -> {
+			java.lang.management.ClassLoadingMXBean cl = java.lang.management.ManagementFactory.getClassLoadingMXBean();
+			addMetric(ctx, resultList, now, "ClassLoading", "LoadedClassCount",
+					java.math.BigDecimal.valueOf(cl.getLoadedClassCount()), "count");
+			addMetric(ctx, resultList, now, "ClassLoading", "TotalLoadedClassCount",
+					java.math.BigDecimal.valueOf(cl.getTotalLoadedClassCount()), "count");
+			addMetric(ctx, resultList, now, "ClassLoading", "UnloadedClassCount",
+					java.math.BigDecimal.valueOf(cl.getUnloadedClassCount()), "count");
+		});
 
-			long freeMem = sunOs.getFreeMemorySize();
-			if (freeMem >= 0) {
-				addMetric(ctx, resultList, now, "OSMemory", "FreePhysicalMemoryMB", toMB(freeMem), "MB");
+		runSection("JIT", () -> {
+			java.lang.management.CompilationMXBean comp = java.lang.management.ManagementFactory.getCompilationMXBean();
+			if (comp != null && comp.isCompilationTimeMonitoringSupported()) {
+				addMetric(ctx, resultList, now, "JIT", "TotalCompilationTimeMs",
+						java.math.BigDecimal.valueOf(comp.getTotalCompilationTime()), "ms");
 			}
+		});
 
-			long totalSwap = sunOs.getTotalSwapSpaceSize();
-			if (totalSwap > 0) {
-				addMetric(ctx, resultList, now, "OSMemory", "TotalSwapMB", toMB(totalSwap), "MB");
-			}
+		// ── 8. RUNTIME UPTIME ─────────────────────────────────────────────────────
+		runSection("Runtime", () -> {
+			double uptimeHours = (double) rt.getUptime() / (1000.0 * 60.0 * 60.0);
+			addMetric(ctx, resultList, now, "Runtime", "UptimeHours", round(uptimeHours, 2), "hours");
+			addMetric(ctx, resultList, now, "Runtime", "JvmUptimeSeconds", round(rt.getUptime() / 1000.0, 0), "s");
+			addMetric(ctx, resultList, now, "Runtime", "StartTimeEpochMs",
+					java.math.BigDecimal.valueOf(rt.getStartTime()), "ms");
+		});
 
-			long freeSwap = sunOs.getFreeSwapSpaceSize();
-			if (freeSwap >= 0) {
-				addMetric(ctx, resultList, now, "OSMemory", "FreeSwapMB", toMB(freeSwap), "MB");
-			}
+		// ── 9. DATABASE CONNECTION POOL (JMX MBeans) ──────────────────────────────
+		runSection("DbPoolJmx", () -> collectDbPools(ctx, resultList, now, mbs));
+
+		// ── 10. DATABASE SESSIONS (fallback, works without pool MBeans) ───────────
+		if (ENABLE_DB_SESSIONS) {
+			runSection("DbSessions", () -> collectDbSessions(ctx, resultList, now));
 		}
 
-		// ── 3. THREADS ────────────────────────────────────────────────────────────
-		java.lang.management.ThreadMXBean threads = java.lang.management.ManagementFactory.getThreadMXBean();
-		addMetric(ctx, resultList, now, "Threads", "LiveThreadCount", java.math.BigDecimal.valueOf(threads.getThreadCount()), "count");
-		addMetric(ctx, resultList, now, "Threads", "PeakThreadCount", java.math.BigDecimal.valueOf(threads.getPeakThreadCount()), "count");
-		addMetric(ctx, resultList, now, "Threads", "DaemonThreadCount", java.math.BigDecimal.valueOf(threads.getDaemonThreadCount()), "count");
-		addMetric(ctx, resultList, now, "Threads", "TotalStartedThreadCount", java.math.BigDecimal.valueOf(threads.getTotalStartedThreadCount()), "count");
+		// ── 11. JETTY (request handler thread pool & connectors) ──────────────────
+		runSection("Jetty", () -> {
+			String tp = "org.eclipse.jetty.util.thread:type=queuedthreadpool,*";
+			addGenericMetric(ctx, resultList, now, mbs, tp, "JettyThreadPool", "threads", "count");
+			addGenericMetric(ctx, resultList, now, mbs, tp, "JettyThreadPool", "idleThreads", "count");
+			addGenericMetric(ctx, resultList, now, mbs, tp, "JettyThreadPool", "queueSize", "count");
+			addGenericMetric(ctx, resultList, now, mbs, tp, "JettyThreadPool", "maxThreads", "count");
 
-		long[] deadlocked = threads.findDeadlockedThreads();
-		int deadlockCount = (deadlocked != null) ? deadlocked.length : 0;
-		addMetric(ctx, resultList, now, "Threads", "DeadlockCount", java.math.BigDecimal.valueOf(deadlockCount), "count");
+			String conn = "org.eclipse.jetty.server:type=serverconnector,*";
+			addGenericMetric(ctx, resultList, now, mbs, conn, "JettyConnector", "connections", "count");
+			addGenericMetric(ctx, resultList, now, mbs, conn, "JettyConnector", "connectionsOpen", "count");
+		});
 
-		// ── 4. GARBAGE COLLECTION ─────────────────────────────────────────────────
-		long totalGcCount = 0;
-		long totalGcTime = 0;
-		for (java.lang.management.GarbageCollectorMXBean gc : java.lang.management.ManagementFactory.getGarbageCollectorMXBeans()) {
-			long count = gc.getCollectionCount();
-			long time = gc.getCollectionTime();
-			if (count > 0) totalGcCount += count;
-			if (time > 0) totalGcTime += time;
+		// ── 12. MENDIX-SPECIFIC ───────────────────────────────────────────────────
+		if (ENABLE_MENDIX) {
+			runSection("Mendix", () -> {
+				java.util.Collection<? extends com.mendix.systemwideinterfaces.core.ISession> sessions = com.mendix.core.Core
+						.getActiveSessions();
+				addMetric(ctx, resultList, now, "Mendix", "ActiveSessions",
+						java.math.BigDecimal.valueOf(sessions.size()), "count");
 
-			String gcKey = gc.getName().replaceAll("\\s+", "");
-			if (count >= 0) {
-				addMetric(ctx, resultList, now, "GC", gcKey + "Count", java.math.BigDecimal.valueOf(count), "count");
-			}
-			if (time >= 0) {
-				addMetric(ctx, resultList, now, "GC", gcKey + "TimeMs", java.math.BigDecimal.valueOf(time), "ms");
-			}
-		}
-		addMetric(ctx, resultList, now, "GC", "TotalCollectionCount", java.math.BigDecimal.valueOf(totalGcCount), "count");
-		addMetric(ctx, resultList, now, "GC", "TotalCollectionTimeMs", java.math.BigDecimal.valueOf(totalGcTime), "ms");
+				long anonymous = 0;
+				for (com.mendix.systemwideinterfaces.core.ISession s : sessions) {
+					try {
+						com.mendix.systemwideinterfaces.core.IUser u = s.getUser(ctx);
+						if (u != null && u.isAnonymous())
+							anonymous++;
+					} catch (Exception ignored) {
+					}
+				}
+				addMetric(ctx, resultList, now, "Mendix", "AnonymousSessions", java.math.BigDecimal.valueOf(anonymous),
+						"count");
+				addMetric(ctx, resultList, now, "Mendix", "NamedSessions",
+						java.math.BigDecimal.valueOf(sessions.size() - anonymous), "count");
+			});
 
-		// ── 5. CLASS LOADING ──────────────────────────────────────────────────────
-		java.lang.management.ClassLoadingMXBean cl = java.lang.management.ManagementFactory.getClassLoadingMXBean();
-		addMetric(ctx, resultList, now, "ClassLoading", "LoadedClassCount", java.math.BigDecimal.valueOf(cl.getLoadedClassCount()), "count");
-		addMetric(ctx, resultList, now, "ClassLoading", "TotalLoadedClassCount", java.math.BigDecimal.valueOf(cl.getTotalLoadedClassCount()), "count");
-		addMetric(ctx, resultList, now, "ClassLoading", "UnloadedClassCount", java.math.BigDecimal.valueOf(cl.getUnloadedClassCount()), "count");
-
-		// ── 6. RUNTIME UPTIME ─────────────────────────────────────────────────────
-		java.lang.management.RuntimeMXBean rt = java.lang.management.ManagementFactory.getRuntimeMXBean();
-		double uptimeHours = (double) rt.getUptime() / (1000.0 * 60.0 * 60.0);
-		addMetric(ctx, resultList, now, "Runtime", "UptimeHours", round(uptimeHours, 2), "hours");
-
-		// ── 7. DATABASE CONNECTION POOL (HikariCP / C3P0) ─────────────────────────
-		javax.management.MBeanServer mbs = java.lang.management.ManagementFactory.getPlatformMBeanServer();
-		try {
-			java.util.Set<javax.management.ObjectName> pools = mbs
-					.queryNames(new javax.management.ObjectName("com.zaxxer.hikari:type=Pool (*),*"), null);
-			if (pools.isEmpty()) {
-				pools = mbs.queryNames(new javax.management.ObjectName("com.mchange.v2.c3p0:*"), null);
-			}
-
-			for (javax.management.ObjectName pool : pools) {
-				addPoolMetric(ctx, resultList, now, mbs, pool, "ActiveConnections", "count");
-				addPoolMetric(ctx, resultList, now, mbs, pool, "IdleConnections", "count");
-				addPoolMetric(ctx, resultList, now, mbs, pool, "TotalConnections", "count");
-				addPoolMetric(ctx, resultList, now, mbs, pool, "ThreadsAwaitingConnection", "count");
-			}
-		} catch (Exception ignored) {
-			/* Pool MBeans unavailable */
+			runSection("MendixQueue", () -> {
+				// Backlog of queued tasks. Capped so a huge queue can't load everything into
+				// memory.
+				final int cap = 10000;
+				int queued = com.mendix.core.Core.createXPathQuery("//System.QueuedTask")
+						.setAmount(cap)
+						.execute(ctx)
+						.size();
+				addMetric(ctx, resultList, now, "Mendix", "QueuedTaskCount", java.math.BigDecimal.valueOf(queued),
+						"count");
+			});
 		}
 
 		return resultList;
@@ -169,15 +398,48 @@ public class JA_MetricItem_Collect extends UserAction<java.util.List<IMendixObje
 
 	/**
 	 * Returns a string representation of this action
+	 * 
 	 * @return a string representation of this action
 	 */
 	@java.lang.Override
-	public java.lang.String toString()
-	{
+	public java.lang.String toString() {
 		return "JA_MetricItem_Collect";
 	}
 
 	// BEGIN EXTRA CODE
+
+	// ── Feature toggles: switch expensive or optional collectors on/off ──────────
+	private static final boolean ENABLE_DISK = true;
+	private static final boolean ENABLE_THREAD_DETAILS = true;
+	private static final boolean ENABLE_DB_SESSIONS = true;
+	private static final boolean ENABLE_MENDIX = true;
+	private static final int TOP_CPU_THREADS = 3;
+
+	// Previous cumulative values, used to compute per-minute rates between runs
+	private static final java.util.concurrent.ConcurrentHashMap<String, double[]> PREVIOUS = new java.util.concurrent.ConcurrentHashMap<>();
+
+	private interface Section {
+		void run() throws Exception;
+	}
+
+	/**
+	 * Runs a collector; a failure in one section never aborts the whole collection.
+	 */
+	private static void runSection(String name, Section section) {
+		try {
+			section.run();
+		} catch (Throwable t) {
+			try {
+				com.mendix.core.Core.getLogger("JMXMonitor").warn("Section '" + name + "' failed: " + t);
+			} catch (Throwable ignored) {
+			}
+		}
+	}
+
+	private static String sanitize(String s) {
+		return s == null ? "" : s.replaceAll("[^A-Za-z0-9]", "");
+	}
+
 	private static void addMetric(IContext ctx, java.util.List<IMendixObject> list,
 			java.util.Date timestamp, String category, String key, java.math.BigDecimal value, String unit) {
 		jmxmonitor.proxies.MetricItem item = new jmxmonitor.proxies.MetricItem(ctx);
@@ -187,6 +449,27 @@ public class JA_MetricItem_Collect extends UserAction<java.util.List<IMendixObje
 		item.setUnit(unit);
 		item.setTimestamp(timestamp);
 		list.add(item.getMendixObject());
+	}
+
+	/**
+	 * Emits a "<key>PerMinute" metric based on the change of a cumulative counter
+	 * since the
+	 * previous run (kept in memory per JVM, so the first run after a restart emits
+	 * nothing).
+	 */
+	private static void addDelta(IContext ctx, java.util.List<IMendixObject> list,
+			java.util.Date timestamp, String category, String key, java.math.BigDecimal current, String unit) {
+		String mapKey = category + "|" + key;
+		double cur = current.doubleValue();
+		double nowMs = timestamp.getTime();
+		double[] prev = PREVIOUS.put(mapKey, new double[] { cur, nowMs });
+		if (prev != null) {
+			double elapsedMin = (nowMs - prev[1]) / 60000.0;
+			double delta = cur - prev[0];
+			if (elapsedMin > 0 && delta >= 0) {
+				addMetric(ctx, list, timestamp, category, key + "PerMinute", round(delta / elapsedMin, 2), unit);
+			}
+		}
 	}
 
 	private static java.math.BigDecimal toMB(long bytes) {
@@ -201,16 +484,117 @@ public class JA_MetricItem_Collect extends UserAction<java.util.List<IMendixObje
 		return java.math.BigDecimal.valueOf(value).setScale(places, java.math.RoundingMode.HALF_UP);
 	}
 
-	private static void addPoolMetric(IContext ctx, java.util.List<IMendixObject> list,
-			java.util.Date timestamp, javax.management.MBeanServer mbs,
-			javax.management.ObjectName pool, String attr, String unit) {
+	/** Reads one numeric attribute from every MBean matching the pattern. */
+	private static void addGenericMetric(IContext ctx, java.util.List<IMendixObject> list, java.util.Date ts,
+			javax.management.MBeanServer mbs, String objectNamePattern, String category, String attr, String unit) {
 		try {
-			Object val = mbs.getAttribute(pool, attr);
-			if (val instanceof Number) {
-				java.math.BigDecimal dec = java.math.BigDecimal.valueOf(((Number) val).doubleValue());
-				addMetric(ctx, list, timestamp, "DatabasePool", attr, dec, unit);
+			for (javax.management.ObjectName on : mbs.queryNames(new javax.management.ObjectName(objectNamePattern),
+					null)) {
+				try {
+					Object val = mbs.getAttribute(on, attr);
+					if (val instanceof Number) {
+						String suffix = on.getKeyProperty("name");
+						if (suffix == null)
+							suffix = on.getKeyProperty("id");
+						String key = (suffix == null) ? attr : sanitize(suffix) + "_" + attr;
+						addMetric(ctx, list, ts, category, key, round(((Number) val).doubleValue(), 2), unit);
+					}
+				} catch (Exception ignored) {
+				}
 			}
 		} catch (Exception ignored) {
+		}
+	}
+
+	/**
+	 * Connection pool metrics for HikariCP, DBCP2 and C3P0 (whichever registers
+	 * MBeans).
+	 */
+	private static void collectDbPools(IContext ctx, java.util.List<IMendixObject> list,
+			java.util.Date ts, javax.management.MBeanServer mbs) {
+		// pattern, active attr, idle attr, total attr, waiting attr
+		String[][] patterns = {
+				{ "com.zaxxer.hikari:type=Pool (*),*", "ActiveConnections", "IdleConnections", "TotalConnections",
+						"ThreadsAwaitingConnection" },
+				{ "org.apache.commons.dbcp2:*", "NumActive", "NumIdle", "MaxTotal", null },
+				{ "com.mchange.v2.c3p0:type=PooledDataSource,*", "numBusyConnections", "numIdleConnections",
+						"numConnections",
+						"numThreadsAwaitingCheckoutDefaultUser" }
+		};
+		String[] outKeys = { "Active", "Idle", "Total", "Waiting" };
+
+		for (String[] p : patterns) {
+			try {
+				for (javax.management.ObjectName on : mbs.queryNames(new javax.management.ObjectName(p[0]), null)) {
+					String poolId = on.getKeyProperty("name");
+					if (poolId == null)
+						poolId = on.getKeyProperty("type");
+					poolId = (poolId == null) ? "Pool" : sanitize(poolId);
+
+					for (int i = 0; i < outKeys.length; i++) {
+						if (p[i + 1] == null)
+							continue;
+						try {
+							Object v = mbs.getAttribute(on, p[i + 1]);
+							if (v instanceof Number) {
+								addMetric(ctx, list, ts, "DatabasePool", poolId + outKeys[i] + "Connections",
+										round(((Number) v).doubleValue(), 0), "count");
+							}
+						} catch (Exception ignored) {
+						}
+					}
+				}
+			} catch (Exception ignored) {
+			}
+		}
+	}
+
+	/**
+	 * Sessions seen by the database server for this database. Works without pool
+	 * MBeans.
+	 * Queries are PostgreSQL ("pg_stat_activity"). On other databases the query
+	 * fails
+	 * and the section is skipped with a warning in the log.
+	 */
+	private static void collectDbSessions(final IContext ctx, final java.util.List<IMendixObject> list,
+			final java.util.Date ts) {
+		try {
+			com.mendix.core.Core.dataStorage().executeWithConnection(conn -> {
+				try {
+					long total = 0;
+					try (java.sql.Statement st = conn.createStatement();
+							java.sql.ResultSet rs = st.executeQuery(
+									"SELECT state, count(*) FROM pg_stat_activity "
+											+ "WHERE datname = current_database() GROUP BY state")) {
+						while (rs.next()) {
+							String state = rs.getString(1) == null ? "unknown" : sanitize(rs.getString(1));
+							long c = rs.getLong(2);
+							total += c;
+							addMetric(ctx, list, ts, "Database", "Sessions_" + state, java.math.BigDecimal.valueOf(c),
+									"count");
+						}
+					}
+					addMetric(ctx, list, ts, "Database", "SessionsTotal", java.math.BigDecimal.valueOf(total), "count");
+
+					try (java.sql.Statement st = conn.createStatement();
+							java.sql.ResultSet rs = st.executeQuery("SHOW max_connections")) {
+						if (rs.next()) {
+							long max = rs.getLong(1);
+							if (max > 0) {
+								addMetric(ctx, list, ts, "Database", "MaxConnections",
+										java.math.BigDecimal.valueOf(max), "count");
+								addMetric(ctx, list, ts, "Database", "ConnectionUsagePercent",
+										round(((double) total / (double) max) * 100.0, 2), "%");
+							}
+						}
+					}
+				} catch (Exception e) {
+					com.mendix.core.Core.getLogger("JMXMonitor").warn("DB session query failed: " + e);
+				}
+				return null;
+			});
+		} catch (Throwable t) {
+			com.mendix.core.Core.getLogger("JMXMonitor").warn("DB session collection unavailable: " + t);
 		}
 	}
 	// END EXTRA CODE
