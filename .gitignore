@@ -1,0 +1,24 @@
+# Mendix caches & build outputs
+deployment/
+.mendix-cache/
+theme-cache/
+*.mpr.lock
+*.mpr.bak
+*.mpr.bak.*
+*.mpr.merge-left.*
+*.mpr.merge-right.*
+
+# OS files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+
+# IDE / Editor files
+.project
+.classpath
+.settings/
+.idea/
+*.iml
+*.vscode/
