@@ -12,7 +12,7 @@ public class UserActionsRegistrar
   {
     registrator.registerUserAction(feedbackmodule.actions.ValidateEmail.class);
     registrator.registerUserAction(feedbackmodule.actions.XSS_Sanitizer.class);
-    registrator.registerUserAction(jmxmonitor.actions.JA_Metrics_Collect.class);
+    registrator.registerUserAction(jmxmonitor.actions.JA_MetricItem_Collect.class);
     registrator.registerUserAction(jmxmonitor.actions.JA_Metrics_Log.class);
     registrator.registerUserAction(system.actions.VerifyPassword.class);
   }

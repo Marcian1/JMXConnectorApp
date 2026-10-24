@@ -6,6 +6,7 @@ package jmxmonitor.proxies.microflows;
 
 import com.mendix.core.Core;
 import com.mendix.systemwideinterfaces.core.IContext;
+import com.mendix.systemwideinterfaces.core.IMendixObject;
 
 public final class Microflows
 {
@@ -15,15 +16,25 @@ public final class Microflows
 	private Microflows() {}
 
 	// These are the microflows for the JMXMonitor module
-	public static com.mendix.core.actionmanagement.MicroflowCallBuilder aCT_Metrics_CollectAndLogBuilder()
+	public static com.mendix.core.actionmanagement.MicroflowCallBuilder aCT_CleanupConfig_OpenBuilder()
 	{
-		com.mendix.core.actionmanagement.MicroflowCallBuilder builder = Core.microflowCall("JMXMonitor.ACT_Metrics_CollectAndLog");
+		com.mendix.core.actionmanagement.MicroflowCallBuilder builder = Core.microflowCall("JMXMonitor.ACT_CleanupConfig_Open");
 		return builder;
 	}
 
-	public static void aCT_Metrics_CollectAndLog(IContext context)
+	public static void aCT_CleanupConfig_Open(IContext context)
 	{
-		aCT_Metrics_CollectAndLogBuilder().execute(context);
+		aCT_CleanupConfig_OpenBuilder().execute(context);
+	}
+	public static com.mendix.core.actionmanagement.MicroflowCallBuilder aCT_MetricItemList_CollectAndLogBuilder()
+	{
+		com.mendix.core.actionmanagement.MicroflowCallBuilder builder = Core.microflowCall("JMXMonitor.ACT_MetricItemList_CollectAndLog");
+		return builder;
+	}
+
+	public static void aCT_MetricItemList_CollectAndLog(IContext context)
+	{
+		aCT_MetricItemList_CollectAndLogBuilder().execute(context);
 	}
 	public static com.mendix.core.actionmanagement.MicroflowCallBuilder aCT_Metrics_LogAllBuilder()
 	{
@@ -35,14 +46,85 @@ public final class Microflows
 	{
 		aCT_Metrics_LogAllBuilder().execute(context);
 	}
-	public static com.mendix.core.actionmanagement.MicroflowCallBuilder nAV_Metrics_OpenOverviewBuilder()
+	public static com.mendix.core.actionmanagement.MicroflowCallBuilder dS_CleanupConfig_GetOrCreateBuilder()
 	{
-		com.mendix.core.actionmanagement.MicroflowCallBuilder builder = Core.microflowCall("JMXMonitor.NAV_Metrics_OpenOverview");
+		com.mendix.core.actionmanagement.MicroflowCallBuilder builder = Core.microflowCall("JMXMonitor.DS_CleanupConfig_GetOrCreate");
 		return builder;
 	}
 
-	public static void nAV_Metrics_OpenOverview(IContext context)
+	public static jmxmonitor.proxies.CleanupConfig dS_CleanupConfig_GetOrCreate(IContext context)
 	{
-		nAV_Metrics_OpenOverviewBuilder().execute(context);
+		Object result = dS_CleanupConfig_GetOrCreateBuilder().execute(context);
+		return result == null ? null : jmxmonitor.proxies.CleanupConfig.initialize(context, (IMendixObject) result);
+	}
+	public static com.mendix.core.actionmanagement.MicroflowCallBuilder dS_FilterHelper_CreateBuilder()
+	{
+		com.mendix.core.actionmanagement.MicroflowCallBuilder builder = Core.microflowCall("JMXMonitor.DS_FilterHelper_Create");
+		return builder;
+	}
+
+	public static jmxmonitor.proxies.FilterHelper dS_FilterHelper_Create(IContext context)
+	{
+		Object result = dS_FilterHelper_CreateBuilder().execute(context);
+		return result == null ? null : jmxmonitor.proxies.FilterHelper.initialize(context, (IMendixObject) result);
+	}
+	public static com.mendix.core.actionmanagement.MicroflowCallBuilder nAV_Metrics_OverviewBuilder()
+	{
+		com.mendix.core.actionmanagement.MicroflowCallBuilder builder = Core.microflowCall("JMXMonitor.NAV_Metrics_Overview");
+		return builder;
+	}
+
+	public static void nAV_Metrics_Overview(IContext context)
+	{
+		nAV_Metrics_OverviewBuilder().execute(context);
+	}
+	public static com.mendix.core.actionmanagement.MicroflowCallBuilder nAV_Metrics_TestBuilder()
+	{
+		com.mendix.core.actionmanagement.MicroflowCallBuilder builder = Core.microflowCall("JMXMonitor.NAV_Metrics_Test");
+		return builder;
+	}
+
+	public static void nAV_Metrics_Test(IContext context)
+	{
+		nAV_Metrics_TestBuilder().execute(context);
+	}
+	public static com.mendix.core.actionmanagement.MicroflowCallBuilder oCH_FilterHelperBuilder(
+		jmxmonitor.proxies.FilterHelper _filterHelper
+	)
+	{
+		com.mendix.core.actionmanagement.MicroflowCallBuilder builder = Core.microflowCall("JMXMonitor.OCH_FilterHelper");
+		builder = builder.withParam("FilterHelper", _filterHelper);
+		return builder;
+	}
+
+	public static void oCH_FilterHelper(
+		IContext context,
+		jmxmonitor.proxies.FilterHelper _filterHelper
+	)
+	{
+		oCH_FilterHelperBuilder(
+				_filterHelper
+			)
+			.execute(context);
+	}
+	public static com.mendix.core.actionmanagement.MicroflowCallBuilder sE_MetricItemList_CleanupBuilder()
+	{
+		com.mendix.core.actionmanagement.MicroflowCallBuilder builder = Core.microflowCall("JMXMonitor.SE_MetricItemList_Cleanup");
+		return builder;
+	}
+
+	public static void sE_MetricItemList_Cleanup(IContext context)
+	{
+		sE_MetricItemList_CleanupBuilder().execute(context);
+	}
+	public static com.mendix.core.actionmanagement.MicroflowCallBuilder sE_MetricItemList_CollectAndCommitBuilder()
+	{
+		com.mendix.core.actionmanagement.MicroflowCallBuilder builder = Core.microflowCall("JMXMonitor.SE_MetricItemList_CollectAndCommit");
+		return builder;
+	}
+
+	public static void sE_MetricItemList_CollectAndCommit(IContext context)
+	{
+		sE_MetricItemList_CollectAndCommitBuilder().execute(context);
 	}
 }

@@ -13,9 +13,9 @@ import com.mendix.systemwideinterfaces.core.IContext;
 import com.mendix.systemwideinterfaces.core.IMendixObject;
 import com.mendix.systemwideinterfaces.core.UserAction;
 
-public class JA_Metrics_Collect extends UserAction<java.util.List<IMendixObject>>
+public class JA_MetricItem_Collect extends UserAction<java.util.List<IMendixObject>>
 {
-	public JA_Metrics_Collect(IContext context)
+	public JA_MetricItem_Collect(IContext context)
 	{
 		super(context);
 	}
@@ -174,7 +174,7 @@ public class JA_Metrics_Collect extends UserAction<java.util.List<IMendixObject>
 	@java.lang.Override
 	public java.lang.String toString()
 	{
-		return "JA_Metrics_Collect";
+		return "JA_MetricItem_Collect";
 	}
 
 	// BEGIN EXTRA CODE
