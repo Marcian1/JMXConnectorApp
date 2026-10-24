@@ -23,7 +23,158 @@ public class JA_Metrics_Log extends UserAction<java.lang.Void>
 	public java.lang.Void executeAction() throws Exception
 	{
 		// BEGIN USER CODE
-		throw new com.mendix.systemwideinterfaces.MendixRuntimeException("Java action was not implemented");
+		final String SEP = "════════════════════════════════════════════════════════════";
+		final com.mendix.logging.ILogNode logger = com.mendix.core.Core.getLogger("JMXMonitor");
+
+		logger.info(SEP);
+		logger.info("JMX METRICS SNAPSHOT  @  " + new java.util.Date());
+		logger.info(SEP);
+
+		// ── 1. HEAP & NON-HEAP MEMORY ────────────────────────────────────────────────
+		java.lang.management.MemoryMXBean mem = java.lang.management.ManagementFactory.getMemoryMXBean();
+
+		java.lang.management.MemoryUsage heap = mem.getHeapMemoryUsage();
+		logger.info("[MEMORY][HEAP]     init=" + heap.getInit() / (1024 * 1024) + " MB"
+				+ "  used=" + heap.getUsed() / (1024 * 1024) + " MB"
+				+ "  committed=" + heap.getCommitted() / (1024 * 1024) + " MB"
+				+ "  max=" + heap.getMax() / (1024 * 1024) + " MB");
+
+		java.lang.management.MemoryUsage nonHeap = mem.getNonHeapMemoryUsage();
+		logger.info("[MEMORY][NON-HEAP] init=" + nonHeap.getInit() / (1024 * 1024) + " MB"
+				+ "  used=" + nonHeap.getUsed() / (1024 * 1024) + " MB"
+				+ "  committed=" + nonHeap.getCommitted() / (1024 * 1024) + " MB");
+
+		// Memory pools
+		for (java.lang.management.MemoryPoolMXBean pool : java.lang.management.ManagementFactory
+				.getMemoryPoolMXBeans()) {
+			java.lang.management.MemoryUsage u = pool.getUsage();
+			if (u != null)
+				logger.info("[MEMORY][POOL:" + pool.getName() + "]"
+						+ "  used=" + u.getUsed() / (1024 * 1024) + " MB"
+						+ "  max=" + (u.getMax() < 0 ? "N/A" : u.getMax() / (1024 * 1024) + " MB"));
+		}
+
+		// ── 2. GARBAGE COLLECTORS ────────────────────────────────────────────────────
+		for (java.lang.management.GarbageCollectorMXBean gc : java.lang.management.ManagementFactory
+				.getGarbageCollectorMXBeans()) {
+			logger.info("[GC][" + gc.getName() + "]"
+					+ "  collections=" + gc.getCollectionCount()
+					+ "  totalTimeMs=" + gc.getCollectionTime());
+		}
+
+		// ── 3. THREADS ───────────────────────────────────────────────────────────────
+		java.lang.management.ThreadMXBean threads = java.lang.management.ManagementFactory.getThreadMXBean();
+
+		logger.info("[THREADS] live=" + threads.getThreadCount()
+				+ "  peak=" + threads.getPeakThreadCount()
+				+ "  daemon=" + threads.getDaemonThreadCount()
+				+ "  totalStarted=" + threads.getTotalStartedThreadCount());
+
+		long[] deadlocked = threads.findDeadlockedThreads();
+		logger.info("[THREADS][DEADLOCK] count=" + (deadlocked == null ? 0 : deadlocked.length));
+
+		if (threads.isThreadCpuTimeSupported() && threads.isThreadCpuTimeEnabled()) {
+			for (long id : threads.getAllThreadIds()) {
+				java.lang.management.ThreadInfo ti = threads.getThreadInfo(id);
+				if (ti != null) {
+					logger.info("[THREAD][" + id + "][" + ti.getThreadName() + "]"
+							+ "  state=" + ti.getThreadState()
+							+ "  cpuMs=" + threads.getThreadCpuTime(id) / 1_000_000
+							+ "  userMs=" + threads.getThreadUserTime(id) / 1_000_000
+							+ "  blocked=" + ti.getBlockedCount()
+							+ "  waited=" + ti.getWaitedCount());
+				}
+			}
+		}
+
+		// ── 4. CPU & OPERATING SYSTEM ────────────────────────────────────────────────
+		java.lang.management.OperatingSystemMXBean os = java.lang.management.ManagementFactory
+				.getOperatingSystemMXBean();
+
+		logger.info("[OS] name=" + os.getName()
+				+ "  version=" + os.getVersion()
+				+ "  arch=" + os.getArch()
+				+ "  processors=" + os.getAvailableProcessors()
+				+ "  loadAvg(1min)=" + String.format("%.2f", os.getSystemLoadAverage()));
+
+		if (os instanceof com.sun.management.OperatingSystemMXBean) {
+			com.sun.management.OperatingSystemMXBean sunOs = (com.sun.management.OperatingSystemMXBean) os;
+			logger.info("[CPU] processCpuLoad=" + String.format("%.2f%%", sunOs.getProcessCpuLoad() * 100)
+					+ "  systemCpuLoad=" + String.format("%.2f%%", sunOs.getCpuLoad() * 100)
+					+ "  processCpuTimeNs=" + sunOs.getProcessCpuTime());
+			logger.info("[OS][MEMORY] totalPhysical=" + sunOs.getTotalMemorySize() / (1024 * 1024) + " MB"
+					+ "  freePhysical=" + sunOs.getFreeMemorySize() / (1024 * 1024) + " MB"
+					+ "  totalSwap=" + sunOs.getTotalSwapSpaceSize() / (1024 * 1024) + " MB"
+					+ "  freeSwap=" + sunOs.getFreeSwapSpaceSize() / (1024 * 1024) + " MB"
+					+ "  committedVirtual=" + sunOs.getCommittedVirtualMemorySize() / (1024 * 1024) + " MB");
+		}
+
+		// ── 5. JVM RUNTIME ───────────────────────────────────────────────────────────
+		java.lang.management.RuntimeMXBean rt = java.lang.management.ManagementFactory.getRuntimeMXBean();
+
+		logger.info("[JVM] name=" + rt.getName()
+				+ "  vmName=" + rt.getVmName()
+				+ "  vmVendor=" + rt.getVmVendor()
+				+ "  vmVersion=" + rt.getVmVersion()
+				+ "  specVersion=" + rt.getSpecVersion()
+				+ "  uptimeMs=" + rt.getUptime()
+				+ "  startTime=" + new java.util.Date(rt.getStartTime()));
+		logger.info("[JVM][ARGS] " + rt.getInputArguments());
+
+		// ── 6. CLASS LOADING ─────────────────────────────────────────────────────────
+		java.lang.management.ClassLoadingMXBean cl = java.lang.management.ManagementFactory.getClassLoadingMXBean();
+		logger.info("[CLASSLOADING] loaded=" + cl.getLoadedClassCount()
+				+ "  totalLoaded=" + cl.getTotalLoadedClassCount()
+				+ "  unloaded=" + cl.getUnloadedClassCount());
+
+		// ── 7. JIT COMPILATION ───────────────────────────────────────────────────────
+		java.lang.management.CompilationMXBean comp = java.lang.management.ManagementFactory.getCompilationMXBean();
+		if (comp != null)
+			logger.info("[JIT] compiler=" + comp.getName()
+					+ "  totalCompileTimeMs=" + comp.getTotalCompilationTime());
+
+		// ── 8. ALL MBEAN ATTRIBUTES (full platform scan) ─────────────────────────────
+		javax.management.MBeanServer mbs = java.lang.management.ManagementFactory.getPlatformMBeanServer();
+		logger.info("[MBEANS] registered=" + mbs.getMBeanCount());
+
+		for (javax.management.ObjectName objName : mbs.queryNames(null, null)) {
+			try {
+				for (javax.management.MBeanAttributeInfo attr : mbs.getMBeanInfo(objName).getAttributes()) {
+					if (!attr.isReadable())
+						continue;
+					try {
+						Object val = mbs.getAttribute(objName, attr.getName());
+						logger.info("[MBEAN][" + objName.getCanonicalName() + "]["
+								+ attr.getName() + "] = " + val);
+					} catch (Exception ignored) {
+						/* attribute unreadable at runtime */ }
+				}
+			} catch (Exception ignored) {
+				/* MBean info unavailable */ }
+		}
+
+		// ── 9. DATABASE CONNECTION POOL (HikariCP / C3P0) ────────────────────────────
+		try {
+			java.util.Set<javax.management.ObjectName> pools = mbs
+					.queryNames(new javax.management.ObjectName("com.zaxxer.hikari:type=Pool (*),*"), null);
+			if (pools.isEmpty())
+				pools = mbs.queryNames(new javax.management.ObjectName("com.mchange.v2.c3p0:*"), null);
+
+			for (javax.management.ObjectName pool : pools) {
+				logger.info("[DB-POOL][" + pool.getCanonicalName() + "]"
+						+ "  active=" + safeGet(mbs, pool, "ActiveConnections")
+						+ "  idle=" + safeGet(mbs, pool, "IdleConnections")
+						+ "  total=" + safeGet(mbs, pool, "TotalConnections")
+						+ "  pending=" + safeGet(mbs, pool, "ThreadsAwaitingConnection"));
+			}
+		} catch (Exception e) {
+			logger.warn("[DB-POOL] Could not query connection pool MBeans: " + e.getMessage());
+		}
+
+		logger.info(SEP);
+		logger.info("JMX METRICS SNAPSHOT COMPLETE");
+		logger.info(SEP);
+		return null;
 		// END USER CODE
 	}
 
@@ -38,5 +189,13 @@ public class JA_Metrics_Log extends UserAction<java.lang.Void>
 	}
 
 	// BEGIN EXTRA CODE
+	private static Object safeGet(javax.management.MBeanServer mbs,
+			javax.management.ObjectName name, String attr) {
+		try {
+			return mbs.getAttribute(name, attr);
+		} catch (Exception e) {
+			return "N/A";
+		}
+	}
 	// END EXTRA CODE
 }
