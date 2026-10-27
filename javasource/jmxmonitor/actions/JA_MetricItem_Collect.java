@@ -13,13 +13,16 @@ import com.mendix.systemwideinterfaces.core.IContext;
 import com.mendix.systemwideinterfaces.core.IMendixObject;
 import com.mendix.systemwideinterfaces.core.UserAction;
 
-public class JA_MetricItem_Collect extends UserAction<java.util.List<IMendixObject>> {
-	public JA_MetricItem_Collect(IContext context) {
+public class JA_MetricItem_Collect extends UserAction<java.util.List<IMendixObject>>
+{
+	public JA_MetricItem_Collect(IContext context)
+	{
 		super(context);
 	}
 
 	@java.lang.Override
-	public java.util.List<IMendixObject> executeAction() throws Exception {
+	public java.util.List<IMendixObject> executeAction() throws Exception
+	{
 		// BEGIN USER CODE
 		final java.util.List<IMendixObject> resultList = new java.util.ArrayList<>();
 		final java.util.Date now = new java.util.Date();
@@ -398,11 +401,11 @@ public class JA_MetricItem_Collect extends UserAction<java.util.List<IMendixObje
 
 	/**
 	 * Returns a string representation of this action
-	 * 
 	 * @return a string representation of this action
 	 */
 	@java.lang.Override
-	public java.lang.String toString() {
+	public java.lang.String toString()
+	{
 		return "JA_MetricItem_Collect";
 	}
 

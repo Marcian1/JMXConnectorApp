@@ -1,5 +1,5 @@
 {
-  "serializationVersion": 0,
+  "serializationVersion": 2,
   "settingsParts": [
     {
       "suppressions": [],
@@ -12,7 +12,7 @@
       "disabledBestPractices": [],
       "readRecommendations": [],
       "suppressedRecommendations": [],
-      "hasShownRecommendationsNotificationForThisApp": false,
+      "hasShownRecommendationsNotificationForThisApp": true,
       "type": "Mendix.Modeler.MxAssist.PerformanceBot.Serialization.Configuration.PerformanceBotConfiguration, Mendix.Modeler.MxAssist.PerformanceBot.Serialization, Version=11.12.5.0, Culture=neutral, PublicKeyToken=null"
     },
     {
