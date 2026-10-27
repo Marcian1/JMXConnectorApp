@@ -43,3 +43,5 @@ $RECYCLE.BIN/
 /mprcontents/mprjournal*
 modules/javasource/*/proxies/*
 modules/javasource/system/*
+
+.mcp.json
