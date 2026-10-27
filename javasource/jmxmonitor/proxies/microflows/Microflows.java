@@ -127,4 +127,15 @@ public final class Microflows
 	{
 		sE_MetricItemList_CollectAndCommitBuilder().execute(context);
 	}
+	public static com.mendix.core.actionmanagement.MicroflowCallBuilder uT_SE_MetricItemList_Cleanup_DeletesOldItemsKeepsRecentBuilder()
+	{
+		com.mendix.core.actionmanagement.MicroflowCallBuilder builder = Core.microflowCall("JMXMonitor.UT_SE_MetricItemList_Cleanup_DeletesOldItemsKeepsRecent");
+		return builder;
+	}
+
+	public static boolean uT_SE_MetricItemList_Cleanup_DeletesOldItemsKeepsRecent(IContext context)
+	{
+		Object result = uT_SE_MetricItemList_Cleanup_DeletesOldItemsKeepsRecentBuilder().execute(context);
+		return (boolean) result;
+	}
 }

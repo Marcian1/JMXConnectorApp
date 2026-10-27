@@ -15,6 +15,17 @@ public final class Microflows
 	private Microflows() {}
 
 	// These are the microflows for the MyFirstModule module
+	public static com.mendix.core.actionmanagement.MicroflowCallBuilder aSU_AfterStartupBuilder()
+	{
+		com.mendix.core.actionmanagement.MicroflowCallBuilder builder = Core.microflowCall("MyFirstModule.ASU_AfterStartup");
+		return builder;
+	}
+
+	public static boolean aSU_AfterStartup(IContext context)
+	{
+		Object result = aSU_AfterStartupBuilder().execute(context);
+		return (boolean) result;
+	}
 	public static com.mendix.core.actionmanagement.MicroflowCallBuilder myFirstLogicBuilder()
 	{
 		com.mendix.core.actionmanagement.MicroflowCallBuilder builder = Core.microflowCall("MyFirstModule.MyFirstLogic");
